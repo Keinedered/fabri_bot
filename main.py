@@ -38,10 +38,10 @@ HOTLINE_PHONE = os.getenv("HOTLINE_PHONE", "+7 (495) 123-45-67").strip()
 # Phone number shown when user declines processing consent (requirement #1)
 CONSENT_DECLINE_PHONE = os.getenv("CONSENT_DECLINE_PHONE", HOTLINE_PHONE).strip()
 
-# Optional: where to forward collected анкета (admin chat/user id)
-# Example: ADMIN_CHAT_ID=123456789
-ADMIN_CHAT_ID_RAW = os.getenv("ADMIN_CHAT_ID", "").strip()
-ADMIN_CHAT_ID: Optional[int] = int(ADMIN_CHAT_ID_RAW) if ADMIN_CHAT_ID_RAW else None
+# Group chat where completed surveys are forwarded (bot must be a member)
+# Example: GROUP_CHAT_ID=-1001234567890
+GROUP_CHAT_ID_RAW = os.getenv("GROUP_CHAT_ID", "").strip()
+GROUP_CHAT_ID: Optional[int] = int(GROUP_CHAT_ID_RAW) if GROUP_CHAT_ID_RAW else None
 
 
 # =========================
@@ -439,6 +439,17 @@ def _should_ask_pain_triggers(data: dict[str, Any]) -> bool:
     return pain is not None and pain != "Никогда"
 
 
+HOTLINE_REMINDERS: dict[int, str] = {
+    6: (
+        "📞 Напоминаем: если у вас возникнут вопросы, вы можете в любой момент "
+        f"позвонить на горячую линию: {HOTLINE_PHONE}"
+    ),
+    19: (
+        "📞 Медицинская часть анкеты завершена. Если вы хотите обсудить "
+        f"результаты со специалистом — звоните на горячую линию: {HOTLINE_PHONE}"
+    ),
+}
+
 STEPS: list[Step] = [
     Step(key="role", kind="choice", text=_step_text_role, options=_step_options_role),
     Step(key="sex", kind="choice", text=_step_text_sex, options=_step_options_sex),
@@ -492,6 +503,9 @@ async def send_step(message: Message, state: FSMContext) -> None:
     if valid_idx != idx:
         idx = valid_idx
         await state.update_data(step_index=idx)
+
+    if idx in HOTLINE_REMINDERS:
+        await message.answer(HOTLINE_REMINDERS[idx])
 
     step = step_by_index(idx)
     text = step.text(data)
@@ -654,14 +668,14 @@ async def finish_survey(message: Message, state: FSMContext) -> None:
             "Болезнь Фабри – это редкое генетическое заболевание.\n\n"
             "Рекомендуем вам распечатать результаты этого диалога и записаться на прием к врачу-неврологу или генетику.\n\n"
             "Для точной диагностики необходимо сдать генетический анализ и провести анализ уровня фермента альфа-галактозидазы.\n\n"
-            "Вы также можете позвонить по телефону горячей линии: 8 (800) 101-82-81."
+            f"Вы также можете позвонить по телефону горячей линии: {HOTLINE_PHONE}."
         )
     else:
         info = (
             "На основе ваших ответов выявлено сходство некоторых признаков с Болезнью Фабри. "
             "Болезнь Фабри – это редкое генетическое заболевание.\n\n"
             "Для точной диагностики необходимо направить пациента на генетический анализ и провести анализ уровня фермента альфа-галактозидазы.\n\n"
-            "Позвоните по телефону горячей линии: 8 (800) 101-82-81 и мы поможем Вам оформить пациента на анализы."
+            f"Позвоните по телефону горячей линии: {HOTLINE_PHONE} и мы поможем Вам оформить пациента на анализы."
         )
     await message.answer(info)
 
@@ -683,10 +697,10 @@ async def finish_survey(message: Message, state: FSMContext) -> None:
         json.dumps(data, ensure_ascii=False, indent=2),
     )
 
-    if ADMIN_CHAT_ID and bot and admin_forwarding_enabled:
+    if GROUP_CHAT_ID and bot and admin_forwarding_enabled:
         try:
             await bot.send_message(
-                ADMIN_CHAT_ID,
+                GROUP_CHAT_ID,
                 "🩺 Новая анкета\n"
                 f"Fabry Risk Score: {fabry_score} ({score_interpretation})\n"
                 f"user_id: {user_id}\nchat_id: {chat_id}\n\n"
@@ -696,14 +710,14 @@ async def finish_survey(message: Message, state: FSMContext) -> None:
             if "chat not found" in str(e).lower():
                 admin_forwarding_enabled = False
                 logger.warning(
-                    "Admin forwarding disabled: chat not found for ADMIN_CHAT_ID=%s. "
-                    "Проверьте ID чата и убедитесь, что бот добавлен в чат (или откройте диалог с ботом).",
-                    ADMIN_CHAT_ID,
+                    "Group forwarding disabled: chat not found for GROUP_CHAT_ID=%s. "
+                    "Проверьте ID группы и убедитесь, что бот добавлен в группу.",
+                    GROUP_CHAT_ID,
                 )
             else:
-                logger.exception("Failed to send data to admin chat")
+                logger.exception("Failed to send data to group chat")
         except Exception:
-            logger.exception("Failed to send data to admin chat")
+            logger.exception("Failed to send data to group chat")
 
     await state.clear()
 
@@ -752,6 +766,9 @@ async def cb_consent(callback: CallbackQuery, state: FSMContext) -> None:
         step_index=0,
     )
     await callback.message.answer("Спасибо! Начинаем анкетирование.")
+    await callback.message.answer(
+        f"📞 На любом этапе анкетирования вы можете позвонить на горячую линию: {HOTLINE_PHONE}"
+    )
     await send_step(callback.message, state)
 
 
