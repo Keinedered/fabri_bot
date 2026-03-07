@@ -122,14 +122,10 @@ def validate_nonempty(text: str, _: dict[str, Any]) -> tuple[bool, str]:
     return True, ""
 
 
-def validate_contact(text: str, _: dict[str, Any]) -> tuple[bool, str]:
+def validate_full_name(text: str, _: dict[str, Any]) -> tuple[bool, str]:
     t = _normalize_spaces(text)
-    if len(t) < 5:
-        return False, "Пожалуйста, укажите имя и номер телефона (или хотя бы номер)."
-    # Lightweight phone presence check (Russia-style +7/8 or digits).
-    digits = re.sub(r"\D", "", t)
-    if len(digits) < 10:
-        return False, "Не вижу номера телефона. Можно в формате +7XXXXXXXXXX или 8XXXXXXXXXX."
+    if len(t) < 2:
+        return False, "Пожалуйста, укажите ваше ФИО."
     return True, ""
 
 
@@ -422,15 +418,11 @@ def _wants_callback(data: dict[str, Any]) -> bool:
     return data.get("callback_pref") == "Да, я жду обратного звонка"
 
 
-def _step_text_contact(_: dict[str, Any]) -> str:
-    return (
-        "Укажите пожалуйста Ваше имя и номер телефона.\n"
-        "Пример: Иван, +7 999 123-45-67"
-    )
+def _step_text_full_name(_: dict[str, Any]) -> str:
+    return "Укажите пожалуйста ваше ФИО (Фамилия Имя Отчество):"
 
 
-def _should_ask_contact(data: dict[str, Any]) -> bool:
-    return _wants_callback(data)
+
 
 
 def _should_ask_pain_triggers(data: dict[str, Any]) -> bool:
@@ -475,7 +467,7 @@ STEPS: list[Step] = [
     Step(key="workplace", kind="text", text=_step_text_workplace, condition=_is_doctor, validator=validate_nonempty),
     Step(key="additional_info", kind="collect", text=_step_text_additional),
     Step(key="callback_pref", kind="choice", text=_step_text_callback_pref, options=_step_opts_callback_pref),
-    Step(key="contact", kind="text", text=_step_text_contact, condition=_should_ask_contact, validator=validate_contact),
+    Step(key="full_name", kind="text", text=_step_text_full_name, validator=validate_full_name),
 ]
 
 
