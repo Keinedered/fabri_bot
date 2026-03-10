@@ -609,10 +609,10 @@ def _step_text_phone(data: dict[str, Any]) -> str:
     return _for_patient_or_self(
         data,
         "Укажите пожалуйста ваш номер телефона.\n"
-        "Пример: +7 999 123-45-67\n\n"
-        "Или нажмите кнопку 'Поделиться номером' ниже."
+        "Пример: +7XXXXXXXXXX\n\n"
+        "Или нажмите кнопку «Поделиться номером» ниже.",
         "Укажите, пожалуйста, номер телефона пациента.\n"
-        "Пример: +7 999 123-45-67",
+        "Пример: +7XXXXXXXXXX",
     )
 
 
@@ -712,11 +712,7 @@ async def send_step(message: Message, state: FSMContext) -> None:
         markup = choice_keyboard(idx, opts).as_markup()
         await state.set_state(SurveyFSM.waiting_choice)
     elif step.kind == "text":
-        # Use special keyboard for phone with "Share number" button
-        if step.key == "phone":
-            markup = phone_keyboard()
-        else:
-            markup = text_keyboard().as_markup()
+        markup = text_keyboard().as_markup()
         await state.set_state(SurveyFSM.waiting_text)
     else:
         markup = collect_keyboard(idx).as_markup()
@@ -1182,60 +1178,19 @@ async def text_answer(message: Message, state: FSMContext) -> None:
     elif message.text is not None:
         raw = _normalize_spaces(message.text)
     else:
-        sent = await message.answer(
-            "Пожалуйста, отправьте ответ текстом.",
-            reply_markup=text_keyboard().as_markup(),
-        )
+        if step.key == "phone":
+            hint = "Пожалуйста, отправьте номер телефона текстом или нажмите «Поделиться номером»."
+        else:
+            hint = "Пожалуйста, отправьте ответ текстом."
+        sent = await message.answer(hint, reply_markup=text_keyboard().as_markup())
         await _track_msg(state, message.message_id, sent.message_id)
         return
 
-    data = await state.get_data()
-    idx = data.get("step_index", 0)
-    step = step_by_index(idx)
-
-    # Handle contact sharing for phone step
-    if step.key == "phone" and message.contact:
-        phone_number = message.contact.phone_number
-        answers = dict(data.get("answers", {}))
-        answers[step.key] = phone_number
-        await state.update_data(answers=answers)
-
-        # Remove reply keyboard and proceed
-        await message.answer("✅ Спасибо! Номер телефона получен.", reply_markup=ReplyKeyboardRemove())
-
-        new_data = await state.get_data()
-        nxt = next_step_index(idx + 1, new_data)
-        if nxt is None:
-            await finish_survey(message, state)
-            return
-        await state.update_data(step_index=nxt)
-        await send_step(message, state)
-        return
-
-    # Regular text input handling
-    if message.text is None:
-        if step.key == "phone":
-            await message.answer(
-                "Пожалуйста, отправьте номер телефона текстом или нажмите 'Поделиться номером'.",
-                reply_markup=phone_keyboard(),
-            )
-        else:
-            await message.answer(
-                "Пожалуйста, отправьте ответ текстом.",
-                reply_markup=text_keyboard().as_markup(),
-            )
-        return
-
-    raw = _normalize_spaces(message.text)
     if step.validator:
         ok, err = step.validator(raw, data)
         if not ok:
             sent = await message.answer(err, reply_markup=text_keyboard().as_markup())
             await _track_msg(state, message.message_id, sent.message_id)
-            if step.key == "phone":
-                await message.answer(err, reply_markup=phone_keyboard())
-            else:
-                await message.answer(err, reply_markup=text_keyboard().as_markup())
             return
 
     # Track user message so it gets deleted with the next step
