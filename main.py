@@ -602,6 +602,14 @@ def _wants_callback(data: dict[str, Any]) -> bool:
     return data.get("callback_pref") == "Да, я жду обратного звонка"
 
 
+def _wants_sms(data: dict[str, Any]) -> bool:
+    return data.get("sms_pref") == "Да, хочу получить рекомендацию в СМС"
+
+
+def _should_ask_sms_pref(data: dict[str, Any]) -> bool:
+    return not _wants_callback(data)
+
+
 def _step_text_full_name(data: dict[str, Any]) -> str:
     return _for_patient_or_self(
         data,
@@ -622,7 +630,7 @@ def _step_text_phone(data: dict[str, Any]) -> str:
 
 
 def _should_ask_phone(data: dict[str, Any]) -> bool:
-    return _wants_callback(data)
+    return _wants_callback(data) or _wants_sms(data)
 
 
 def _should_ask_pain_triggers(data: dict[str, Any]) -> bool:
@@ -669,7 +677,14 @@ STEPS: list[Step] = [
     Step(key="workplace", kind="text", text=_step_text_workplace, condition=_is_doctor, validator=validate_nonempty),
     Step(key="additional_info", kind="collect", text=_step_text_additional),
     Step(key="callback_pref", kind="choice", text=_step_text_callback_pref, options=_step_opts_callback_pref),
-    # Contact info - always collect full name, phone only if callback requested
+    Step(
+        key="sms_pref",
+        kind="choice",
+        text=lambda _: "Может, вы хотите получить рекомендацию от специалиста в СМС?",
+        options=lambda _: ["Да, хочу получить рекомендацию в СМС", "Нет, не нужно"],
+        condition=_should_ask_sms_pref,
+    ),
+    # Contact info - always collect full name, phone only if callback or sms requested
     Step(key="full_name", kind="text", text=_step_text_full_name, validator=validate_full_name),
     Step(key="phone", kind="text", text=_step_text_phone, condition=_should_ask_phone, validator=validate_phone),
 ]
@@ -763,6 +778,7 @@ def format_summary(data: dict[str, Any]) -> str:
         "workplace": "Место работы",
         "additional_info": "Дополнительные сведения",
         "callback_pref": "Запрос на обратный звонок",
+        "sms_pref": "Запрос на СМС рекомендацию",
         "full_name": "ФИО",
         "phone": "Телефон",
     }
@@ -798,7 +814,7 @@ def format_summary(data: dict[str, Any]) -> str:
         ),
         (
             "Обратная связь и контакты",
-            ["callback_pref", "full_name", "phone"],
+            ["callback_pref", "sms_pref", "full_name", "phone"],
         ),
         ("Дополнительные сведения", ["additional_info"]),
     ]
@@ -831,10 +847,11 @@ def format_summary(data: dict[str, Any]) -> str:
     return "\n".join(lines)[:3800]
 
 
-def build_group_report(title: str, user_id: int, chat_id: int, data: dict[str, Any]) -> str:
+def build_group_report(title: str, user_id: int, chat_id: int, data: dict[str, Any], username: Optional[str] = None) -> str:
+    user_display = f"@{username} (ID: {user_id})" if username else str(user_id)
     report = (
         f"{title}\n"
-        f"Пользователь: {user_id}\n"
+        f"Пользователь: {user_display}\n"
         f"Чат: {chat_id}\n\n"
         f"{format_summary(data)}"
     )
@@ -960,6 +977,7 @@ async def finish_survey(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     user_id = message.from_user.id
     chat_id = message.chat.id
+    username = message.from_user.username
 
     # Delete previous question messages
     await _delete_tracked(chat_id, state)
@@ -1015,10 +1033,16 @@ async def finish_survey(message: Message, state: FSMContext) -> None:
     data["fabry_score"] = fabry_score
     data["score_interpretation"] = score_interpretation
     
+    user_ident = f"@{username} (ID={user_id})" if username else f"user_id={user_id}"
+    contact_parts = [f"callback={'yes' if wants_callback else 'no'}"]
+    if not wants_callback:
+        contact_parts.append(f"sms={'yes' if _wants_sms(data) else 'no'}")
+    contact_pref = " | ".join(contact_parts)
+
     logger.info(
-        "Survey completed for user_id=%s chat_id=%s | Fabry Risk Score: %s (%s)\n%s",
-        user_id,
-        chat_id,
+        "Survey completed for %s | %s | Fabry Risk Score: %s (%s)\n%s",
+        user_ident,
+        contact_pref,
         fabry_score,
         score_interpretation,
         json.dumps(data, ensure_ascii=False, indent=2),
@@ -1028,7 +1052,7 @@ async def finish_survey(message: Message, state: FSMContext) -> None:
         try:
             await bot.send_message(
                 GROUP_CHAT_ID,
-                build_group_report("🩺 Новая анкета", user_id, chat_id, data),
+                build_group_report("🩺 Новая анкета", user_id, chat_id, data, username=username),
             )
         except TelegramBadRequest as e:
             if "chat not found" in str(e).lower():
@@ -1053,6 +1077,7 @@ async def finish_with_confirmed_diagnosis(message: Message, state: FSMContext) -
     data = await state.get_data()
     user_id = message.from_user.id
     chat_id = message.chat.id
+    username = message.from_user.username
 
     await _delete_tracked(chat_id, state)
 
@@ -1067,9 +1092,10 @@ async def finish_with_confirmed_diagnosis(message: Message, state: FSMContext) -
 
     data["early_exit_reason"] = "confirmed_fabry_diagnosis"
 
+    user_ident = f"@{username} (ID={user_id})" if username else f"user_id={user_id}"
     logger.info(
-        "Survey finished early for confirmed diagnosis user_id=%s chat_id=%s\n%s",
-        user_id,
+        "Survey finished early for confirmed diagnosis %s chat_id=%s\n%s",
+        user_ident,
         chat_id,
         json.dumps(data, ensure_ascii=False, indent=2),
     )
@@ -1083,6 +1109,7 @@ async def finish_with_confirmed_diagnosis(message: Message, state: FSMContext) -
                     user_id,
                     chat_id,
                     data,
+                    username=username,
                 ),
             )
         except TelegramBadRequest as e:
@@ -1182,7 +1209,7 @@ async def cb_choice_answer(callback: CallbackQuery, state: FSMContext) -> None:
     answers[step.key] = value
 
     patch: dict[str, Any] = {"answers": answers}
-    if step.key in ("role", "sex", "callback_pref"):
+    if step.key in ("role", "sex", "callback_pref", "sms_pref"):
         patch[step.key] = value
     await state.update_data(**patch)
 
