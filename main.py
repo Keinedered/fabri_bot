@@ -264,7 +264,7 @@ async def _delete_tracked(chat_id: int, state: FSMContext) -> None:
         try:
             await bot.delete_message(chat_id, mid)
         except Exception:
-            pass
+            logger.warning("Failed to delete message %s in chat %s", mid, chat_id, exc_info=True)
     if ids:
         await state.update_data(_del_ids=[])
 
