@@ -559,8 +559,8 @@ def _step_opts_eyes(_: dict[str, Any]) -> list[str]:
 def _step_text_city(data: dict[str, Any]) -> str:
     return _for_patient_or_self(
         data,
-        "Укажите пожалуйста Ваш город?",
-        "Укажите, пожалуйста, город пациента.",
+        "Укажите пожалуйста Ваш город",
+        "Укажите, пожалуйста, Ваш город.",
     )
 
 
@@ -607,8 +607,8 @@ def _step_text_additional(data: dict[str, Any]) -> str:
 def _step_text_callback_pref(data: dict[str, Any]) -> str:
     return _for_patient_or_self(
         data,
-        "Хотите ли вы, чтобы специалист перезвонил вам по результатам анкеты?",
-        "Нужно ли, чтобы специалист перезвонил по результатам анкеты?",
+        "Хотите ли вы, чтобы специалист перезвонил Вам по результатам анкеты?",
+        "Нужно ли, чтобы специалист перезвонил Вам по результатам анкеты?",
     )
 
 
@@ -630,7 +630,7 @@ def _should_ask_sms_pref(data: dict[str, Any]) -> bool:
 
 def _step_text_full_name(data: dict[str, Any]) -> str:
     if _is_doctor(data):
-        return "Укажите, пожалуйста, ФИО врача (Фамилия Имя Отчество)."
+        return "Укажите, пожалуйста, ваше, врача, ФИО (Фамилия Имя Отчество)."
     return "Укажите пожалуйста ваше ФИО (Фамилия Имя Отчество):"
 
 
