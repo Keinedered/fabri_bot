@@ -276,20 +276,6 @@ async def save_answer(state: FSMContext, key: str, value: Any) -> None:
     await state.update_data(answers=answers)
 
 
-def _sex_dependent_maternal_phrase(data: dict[str, Any]) -> str:
-    # Based on the source script note: for men add “по материнской линии”.
-    sex = data.get("sex")  # "Мужской"/"Женский"
-    if sex == "Мужской":
-        return " по материнской линии"
-    return ""
-
-def _sex_dependent_paternal_phrase(data: dict[str, Any]) -> str:
-    # Requirement 1.6: for women add "по отцовской линии".
-    sex = data.get("sex")  # "Мужской"/"Женский"
-    if sex == "Женский":
-        return " по отцовской линии"
-    return ""
-
 def _step_text_role(_: dict[str, Any]) -> str:
     return "Кто заполняет анкету?"
 
@@ -344,21 +330,19 @@ def _opts_yes_no_dk(_: dict[str, Any]) -> list[str]:
 
 
 def _step_text_relatives_dx(data: dict[str, Any]) -> str:
-    extra = _sex_dependent_paternal_phrase(data)
     return _for_patient_or_self(
         data,
-        f"Есть ли у вас кровные родственники{extra} с диагностированной Болезнью Фабри?",
-        f"Есть ли у вашего пациента кровные родственники{extra} с диагностированной Болезнью Фабри?",
+        "Есть ли у вас кровные родственники с диагностированной Болезнью Фабри?",
+        "Есть ли у вашего пациента кровные родственники с диагностированной Болезнью Фабри?",
     )
 
 
 def _step_text_relatives_kidney_heart_stroke(data: dict[str, Any]) -> str:
-    extra = _sex_dependent_maternal_phrase(data)
     return _for_patient_or_self(
         data,
-        f"Есть ли у вас кровные родственники{extra} с заболеваниями почек, "
+        "Есть ли у вас кровные родственники с заболеваниями почек, "
         "с заболеваниями сердца, перенесшие инсульт в молодом возрасте (до 50 лет)?",
-        f"Есть ли у вашего пациента кровные родственники{extra} с заболеваниями почек, "
+        "Есть ли у вашего пациента кровные родственники с заболеваниями почек, "
         "с заболеваниями сердца, перенесшие инсульт в молодом возрасте (до 50 лет)?",
     )
 
